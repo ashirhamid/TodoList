@@ -18,32 +18,47 @@ import java.awt.event.FocusEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.WindowEvent;
+import java.io.BufferedWriter;
+import java.io.File;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.awt.event.ActionEvent;
+import java.awt.event.InputEvent;
+import java.awt.event.KeyEvent;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.Deque;
 import java.util.List;
 import java.util.Locale;
 import java.util.stream.Collectors;
+import javax.swing.AbstractAction;
 import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
+import javax.swing.JComponent;
+import javax.swing.JFileChooser;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTextField;
+import javax.swing.KeyStroke;
 import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
 import javax.swing.border.EmptyBorder;
+import javax.swing.filechooser.FileNameExtensionFilter;
 
 /** Main window and task interaction controller.
- * @author OEL Student Team (add team names before submission)
+ * @author Muhammad Mehroz Ammar (534699), Ashir Hamid
  */
 final class TaskManagerPanel {
     private static final Color CARD = new Color(255, 248, 232, 190);
@@ -62,6 +77,13 @@ final class TaskManagerPanel {
     private final JLabel pageTitle = new JLabel("All tasks");
     private final JLabel summary = new JLabel();
     private final SearchField search = new SearchField();
+    private final ProductivityPanel productivityBar = new ProductivityPanel();
+    private final Deque<TaskCommand> undoStack = new ArrayDeque<>();
+    private final Deque<TaskCommand> redoStack = new ArrayDeque<>();
+    private final JPanel toast = new JPanel(new FlowLayout(FlowLayout.CENTER, 10, 0));
+    private final JLabel toastLabel = new JLabel();
+    private final JButton toastUndoButton = new JButton("Undo");
+    private javax.swing.Timer toastTimer;
     private final JFrame frame = new JFrame("TaskNest | A little more organized");
     private String activeFilter = "All tasks";
     private String activeCategory;
@@ -112,10 +134,17 @@ final class TaskManagerPanel {
         sideScroll.getViewport().setOpaque(false);
         workspace.add(sideScroll, BorderLayout.WEST);
 
-        JPanel content = new JPanel(new BorderLayout(0, 20));
+        JPanel content = new JPanel(new BorderLayout(0, 16));
         content.setOpaque(false);
         content.setBorder(new EmptyBorder(30, 34, 26, 34));
-        content.add(buildHeader(), BorderLayout.NORTH);
+
+        JPanel topSection = new JPanel();
+        topSection.setOpaque(false);
+        topSection.setLayout(new BoxLayout(topSection, BoxLayout.Y_AXIS));
+        topSection.add(buildHeader());
+        topSection.add(Box.createVerticalStrut(14));
+        topSection.add(productivityBar);
+        content.add(topSection, BorderLayout.NORTH);
 
         taskList.setOpaque(false);
         taskList.setLayout(new BoxLayout(taskList, BoxLayout.Y_AXIS));
@@ -126,8 +155,39 @@ final class TaskManagerPanel {
         scroll.getViewport().setOpaque(false);
         scroll.getVerticalScrollBar().setUnitIncrement(18);
         content.add(scroll, BorderLayout.CENTER);
+
+        toast.setOpaque(true);
+        toast.setBackground(new Color(24, 32, 47, 240));
+        toast.setBorder(new EmptyBorder(8, 16, 8, 16));
+        toast.setVisible(false);
+        toastLabel.setForeground(Color.WHITE);
+        toastLabel.setFont(new Font("Palatino Linotype", Font.PLAIN, 13));
+        toastUndoButton.setFont(new Font("Palatino Linotype", Font.BOLD, 12));
+        toastUndoButton.setForeground(new Color(255, 241, 219));
+        toastUndoButton.setOpaque(false);
+        toastUndoButton.setContentAreaFilled(false);
+        toastUndoButton.setFocusPainted(false);
+        toastUndoButton.setBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, new Color(255, 241, 219)));
+        toastUndoButton.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        toastUndoButton.addActionListener(e -> undo());
+        toast.add(toastLabel);
+        toast.add(toastUndoButton);
+        content.add(toast, BorderLayout.SOUTH);
+
         workspace.add(content, BorderLayout.CENTER);
         root.add(workspace, BorderLayout.CENTER);
+
+        root.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(
+                KeyStroke.getKeyStroke(KeyEvent.VK_Z, InputEvent.CTRL_DOWN_MASK), "undoAction");
+        root.getActionMap().put("undoAction", new AbstractAction() {
+            @Override public void actionPerformed(ActionEvent e) { undo(); }
+        });
+
+        root.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(
+                KeyStroke.getKeyStroke(KeyEvent.VK_Y, InputEvent.CTRL_DOWN_MASK), "redoAction");
+        root.getActionMap().put("redoAction", new AbstractAction() {
+            @Override public void actionPerformed(ActionEvent e) { redo(); }
+        });
         return root;
     }
 
@@ -235,9 +295,16 @@ final class TaskManagerPanel {
         titles.add(Box.createVerticalStrut(5));
         titles.add(tagline);
         titleRow.add(titles, BorderLayout.WEST);
+        JPanel headerActions = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 0));
+        headerActions.setOpaque(false);
+        JButton export = actionButton("Export", false);
+        export.setToolTipText("Export tasks to Markdown or CSV");
+        export.addActionListener(event -> exportTasks());
         JButton add = actionButton("+  New task", true);
         add.addActionListener(event -> createTask());
-        titleRow.add(add, BorderLayout.EAST);
+        headerActions.add(export);
+        headerActions.add(add);
+        titleRow.add(headerActions, BorderLayout.EAST);
         header.add(titleRow, BorderLayout.NORTH);
 
         JPanel searchRow = new JPanel(new BorderLayout(12, 0));
@@ -302,6 +369,8 @@ final class TaskManagerPanel {
         addNavItem("In Progress", null);
         addNavItem("Completed", null);
         addNavItem("High Priority", null);
+        addNavItem("Due Today", null);
+        addNavItem("Overdue", null);
         sidebar.add(Box.createVerticalStrut(16));
         JPanel categoryHeader = new JPanel(new BorderLayout());
         categoryHeader.setOpaque(false);
@@ -383,6 +452,7 @@ final class TaskManagerPanel {
         long completedCount = tasks.size() - openCount;
         summary.setText(openCount + " open  ·  " + completedCount + " completed");
         pageTitle.setText(activeCategory == null ? activeFilter : activeCategory);
+        productivityBar.update(tasks);
         if (visible.isEmpty()) {
             JPanel empty = new JPanel();
             empty.setOpaque(false);
@@ -417,11 +487,18 @@ final class TaskManagerPanel {
 
     private boolean matchesFilter(Task task) {
         if (activeCategory != null && !task.getCategory().getName().equalsIgnoreCase(activeCategory)) return false;
+        LocalDate today = LocalDate.now();
         switch (activeFilter) {
             case "Pending": return task.getStatus() == TaskStatus.PENDING;
             case "In Progress": return task.getStatus() == TaskStatus.IN_PROGRESS;
             case "Completed": return task.getStatus() == TaskStatus.COMPLETED;
             case "High Priority": return task.getPriority() == Priority.HIGH;
+            case "Due Today":
+                return task.getStatus() != TaskStatus.COMPLETED &&
+                        task.getDueDate() != null && task.getDueDate().isEqual(today);
+            case "Overdue":
+                return task.getStatus() != TaskStatus.COMPLETED &&
+                        task.getDueDate() != null && task.getDueDate().isBefore(today);
             default: return true;
         }
     }
@@ -439,17 +516,21 @@ final class TaskManagerPanel {
         TaskEditorDialog.Draft draft = TaskEditorDialog.show(frame, null, categories);
         if (draft == null) return;
         Category category = ensureCategory(draft.category);
-        tasks.add(new Task(draft.title, draft.description, category, draft.priority, draft.status, draft.dueDate));
-        saveAndRefresh();
+        Task newTask = new Task(draft.title, draft.description, category, draft.priority, draft.status, draft.dueDate);
+        newTask.setRecurrence(draft.recurrence);
+        newTask.setSubtasks(draft.subtasks);
+        executeCommand(new AddTaskCommand(newTask));
     }
 
     private void editTask(Task task) {
         if (loadFailed) return;
         TaskEditorDialog.Draft draft = TaskEditorDialog.show(frame, task, categories);
         if (draft == null) return;
-        task.update(draft.title, draft.description, ensureCategory(draft.category),
-                draft.priority, draft.status, draft.dueDate);
-        saveAndRefresh();
+        TaskMemento before = new TaskMemento(task);
+        Category newCategory = ensureCategory(draft.category);
+        TaskMemento after = new TaskMemento(draft.title, draft.description, newCategory,
+                draft.priority, draft.status, draft.dueDate, draft.recurrence, draft.subtasks);
+        executeCommand(new UpdateTaskCommand(task, before, after));
     }
 
     private void deleteTask(Task task) {
@@ -457,16 +538,40 @@ final class TaskManagerPanel {
         int answer = JOptionPane.showConfirmDialog(frame, "Remove “" + task.getTitle() + "” from your list?",
                 "Delete task", JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE);
         if (answer == JOptionPane.YES_OPTION) {
-            tasks.remove(task);
-            saveAndRefresh();
+            executeCommand(new DeleteTaskCommand(task, tasks.indexOf(task)));
         }
     }
 
     private void setCompleted(Task task, boolean completed) {
         if (loadFailed) return;
         TaskStatus next = completed ? TaskStatus.COMPLETED : TaskStatus.PENDING;
-        task.update(task.getTitle(), task.getDescription(), task.getCategory(), task.getPriority(), next, task.getDueDate());
-        saveAndRefresh();
+        executeCommand(new ToggleTaskCommand(task, next));
+
+        if (completed) {
+            checkRecurringOnComplete(task);
+        }
+    }
+
+    private void checkRecurringOnComplete(Task task) {
+        if (task.getRecurrence() != Recurrence.NONE && task.getDueDate() != null) {
+            LocalDate nextDue = task.getRecurrence().nextDate(task.getDueDate());
+            Task nextTask = new Task(task.getTitle(), task.getDescription(), task.getCategory(),
+                    task.getPriority(), TaskStatus.PENDING, nextDue);
+            nextTask.setRecurrence(task.getRecurrence());
+            List<Subtask> resetSubs = new ArrayList<>();
+            for (Subtask s : task.getSubtasks()) {
+                resetSubs.add(new Subtask(s.getTitle(), false));
+            }
+            nextTask.setSubtasks(resetSubs);
+            tasks.add(nextTask);
+            saveAndRefresh();
+            showToast("Recurring task scheduled for " + nextDue.format(DATE_FORMAT), false);
+        }
+    }
+
+    private void toggleSubtask(Task task, Subtask subtask, boolean completed) {
+        if (loadFailed) return;
+        executeCommand(new ToggleSubtaskCommand(task, subtask, completed));
     }
 
     private void createCategory() {
@@ -535,7 +640,7 @@ final class TaskManagerPanel {
             setLayout(new BorderLayout(14, 0));
             setBorder(new EmptyBorder(15, 17, 15, 14));
             setAlignmentX(Component.LEFT_ALIGNMENT);
-            setMaximumSize(new Dimension(Integer.MAX_VALUE, 128));
+            setMaximumSize(new Dimension(Integer.MAX_VALUE, task.getSubtasks().isEmpty() ? 128 : (128 + task.getSubtasks().size() * 26)));
 
             JCheckBox done = new JCheckBox();
             done.setSelected(task.getStatus() == TaskStatus.COMPLETED);
@@ -568,10 +673,31 @@ final class TaskManagerPanel {
             metadata.add(pill(task.getCategory().getName(), new Color(239, 232, 216), INK));
             metadata.add(pill(task.getPriority().toString(), priorityBg(task.getPriority()), priorityFg(task.getPriority())));
             metadata.add(pill(task.getStatus().toString(), statusBg(task.getStatus()), statusFg(task.getStatus())));
+            if (task.getRecurrence() != Recurrence.NONE) {
+                metadata.add(pill("🔄 " + task.getRecurrence().getLabel(), new Color(228, 238, 252), BLUE));
+            }
+            if (!task.getSubtasks().isEmpty()) {
+                long doneCount = task.getCompletedSubtaskCount();
+                int totalCount = task.getSubtasks().size();
+                metadata.add(pill("✓ " + doneCount + "/" + totalCount + " subtasks",
+                        doneCount == totalCount ? new Color(220, 252, 231) : new Color(241, 245, 249),
+                        doneCount == totalCount ? new Color(21, 128, 61) : INK));
+            }
             if (task.getDueDate() != null) {
-                Color dueColor = task.getDueDate().isBefore(LocalDate.now()) && task.getStatus() != TaskStatus.COMPLETED
+                LocalDate today = LocalDate.now();
+                LocalDate due = task.getDueDate();
+                if (task.getStatus() != TaskStatus.COMPLETED) {
+                    if (due.isBefore(today)) {
+                        metadata.add(pill("🔴 Overdue", new Color(254, 226, 226), new Color(185, 28, 28)));
+                    } else if (due.isEqual(today)) {
+                        metadata.add(pill("🟡 Due Today", new Color(254, 243, 199), new Color(180, 83, 9)));
+                    } else if (!due.isAfter(today.plusDays(3))) {
+                        metadata.add(pill("🟢 Upcoming", new Color(220, 252, 231), new Color(21, 128, 61)));
+                    }
+                }
+                Color dueColor = due.isBefore(today) && task.getStatus() != TaskStatus.COMPLETED
                         ? new Color(179, 79, 62) : MUTED;
-                metadata.add(new JLabel("Due " + task.getDueDate().format(DATE_FORMAT)) {{
+                metadata.add(new JLabel("Due " + due.format(DATE_FORMAT)) {{
                     setForeground(dueColor); setFont(getFont().deriveFont(Font.PLAIN, 11f));
                 }});
             }
@@ -580,6 +706,32 @@ final class TaskManagerPanel {
             details.add(description);
             details.add(Box.createVerticalStrut(9));
             details.add(metadata);
+            if (!task.getSubtasks().isEmpty()) {
+                JPanel subList = new JPanel();
+                subList.setOpaque(false);
+                subList.setLayout(new BoxLayout(subList, BoxLayout.Y_AXIS));
+                subList.setBorder(new EmptyBorder(6, 4, 2, 4));
+                for (Subtask sub : task.getSubtasks()) {
+                    JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
+                    row.setOpaque(false);
+                    JCheckBox sc = new JCheckBox();
+                    sc.setSelected(sub.isCompleted());
+                    sc.setOpaque(false);
+                    sc.setFocusPainted(false);
+                    sc.setEnabled(!loadFailed);
+                    sc.addActionListener(e -> toggleSubtask(task, sub, sc.isSelected()));
+                    JLabel st = new JLabel(sub.isCompleted()
+                            ? "<html><span style='text-decoration:line-through;color:#999999'>" + escapeHtml(sub.getTitle()) + "</span></html>"
+                            : sub.getTitle());
+                    st.setFont(new Font("Palatino Linotype", Font.PLAIN, 12));
+                    st.setForeground(INK);
+                    row.add(sc);
+                    row.add(st);
+                    subList.add(row);
+                }
+                details.add(Box.createVerticalStrut(4));
+                details.add(subList);
+            }
             add(details, BorderLayout.CENTER);
 
             JPanel actions = new JPanel(new FlowLayout(FlowLayout.RIGHT, 5, 0));
@@ -661,6 +813,105 @@ final class TaskManagerPanel {
         return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
     }
 
+    private void exportTasks() {
+        if (tasks.isEmpty()) {
+            JOptionPane.showMessageDialog(frame, "No tasks available to export.", "Export Tasks", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+        String[] options = {"Markdown Checklist (.md)", "Spreadsheet (.csv)", "Cancel"};
+        int choice = JOptionPane.showOptionDialog(frame,
+                "Select the export format for your " + tasks.size() + " tasks:",
+                "Export Tasks",
+                JOptionPane.DEFAULT_OPTION,
+                JOptionPane.QUESTION_MESSAGE,
+                null,
+                options,
+                options[0]);
+
+        if (choice == 0) {
+            exportToMarkdown();
+        } else if (choice == 1) {
+            exportToCsv();
+        }
+    }
+
+    private void exportToMarkdown() {
+        JFileChooser chooser = new JFileChooser();
+        chooser.setDialogTitle("Export Tasks as Markdown");
+        chooser.setSelectedFile(new File("TaskNest-Tasks-" + LocalDate.now() + ".md"));
+        chooser.setFileFilter(new FileNameExtensionFilter("Markdown files (*.md)", "md"));
+        if (chooser.showSaveDialog(frame) != JFileChooser.APPROVE_OPTION) return;
+
+        File file = chooser.getSelectedFile();
+        if (!file.getName().toLowerCase(Locale.ROOT).endsWith(".md")) {
+            file = new File(file.getParentFile(), file.getName() + ".md");
+        }
+
+        try (BufferedWriter writer = Files.newBufferedWriter(file.toPath(), StandardCharsets.UTF_8)) {
+            writer.write("# TaskNest Tasks Export\n\n");
+            writer.write("*Exported on: " + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")) + "*\n\n");
+            long completed = tasks.stream().filter(t -> t.getStatus() == TaskStatus.COMPLETED).count();
+            writer.write(String.format(Locale.ROOT, "**Summary:** %d total | %d completed | %d pending\n\n",
+                    tasks.size(), completed, tasks.size() - completed));
+            writer.write("---\n\n");
+
+            for (Task task : tasks) {
+                String check = task.getStatus() == TaskStatus.COMPLETED ? "[x]" : "[ ]";
+                writer.write(String.format(Locale.ROOT, "- %s **%s** `[%s]` `[%s]`",
+                        check, task.getTitle(), task.getCategory().getName(), task.getPriority()));
+                if (task.getDueDate() != null) {
+                    writer.write(" (Due: " + task.getDueDate() + ")");
+                }
+                writer.write("\n");
+                if (!task.getDescription().isBlank()) {
+                    writer.write("  > " + task.getDescription().replace("\n", " ") + "\n");
+                }
+            }
+            JOptionPane.showMessageDialog(frame, "Tasks successfully exported to:\n" + file.getAbsolutePath(),
+                    "Export Complete", JOptionPane.INFORMATION_MESSAGE);
+        } catch (IOException ex) {
+            JOptionPane.showMessageDialog(frame, "Failed to export tasks:\n" + ex.getMessage(),
+                    "Export Error", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private void exportToCsv() {
+        JFileChooser chooser = new JFileChooser();
+        chooser.setDialogTitle("Export Tasks as CSV");
+        chooser.setSelectedFile(new File("TaskNest-Tasks-" + LocalDate.now() + ".csv"));
+        chooser.setFileFilter(new FileNameExtensionFilter("CSV files (*.csv)", "csv"));
+        if (chooser.showSaveDialog(frame) != JFileChooser.APPROVE_OPTION) return;
+
+        File file = chooser.getSelectedFile();
+        if (!file.getName().toLowerCase(Locale.ROOT).endsWith(".csv")) {
+            file = new File(file.getParentFile(), file.getName() + ".csv");
+        }
+
+        try (BufferedWriter writer = Files.newBufferedWriter(file.toPath(), StandardCharsets.UTF_8)) {
+            writer.write("Title,Description,Category,Priority,Status,DueDate,CreatedAt\n");
+            for (Task task : tasks) {
+                writer.write(String.format(Locale.ROOT, "\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\"\n",
+                        escapeCsv(task.getTitle()),
+                        escapeCsv(task.getDescription()),
+                        escapeCsv(task.getCategory().getName()),
+                        task.getPriority().name(),
+                        task.getStatus().name(),
+                        task.getDueDate() == null ? "" : task.getDueDate().toString(),
+                        task.getCreatedAt() == null ? "" : task.getCreatedAt().toString()));
+            }
+            JOptionPane.showMessageDialog(frame, "Tasks successfully exported to:\n" + file.getAbsolutePath(),
+                    "Export Complete", JOptionPane.INFORMATION_MESSAGE);
+        } catch (IOException ex) {
+            JOptionPane.showMessageDialog(frame, "Failed to export tasks:\n" + ex.getMessage(),
+                    "Export Error", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private static String escapeCsv(String value) {
+        if (value == null) return "";
+        return value.replace("\"", "\"\"");
+    }
+
     private enum WindowControl { MINIMIZE, MAXIMIZE, CLOSE }
 
     private final class WindowControlButton extends JButton {
@@ -728,6 +979,106 @@ final class TaskManagerPanel {
         }
     }
 
+    private static final class ProductivityPanel extends RoundedPanel {
+        private static final long serialVersionUID = 1L;
+        private final JLabel percentLabel = new JLabel("0% completed");
+        private final JLabel statsLabel = new JLabel("0 of 0 tasks");
+        private final JLabel urgencyStats = new JLabel("");
+        private double progress = 0.0;
+
+        ProductivityPanel() {
+            super(CARD, 16);
+            setLayout(new BorderLayout(0, 8));
+            setBorder(new EmptyBorder(12, 18, 12, 18));
+            setAlignmentX(Component.LEFT_ALIGNMENT);
+            setMaximumSize(new Dimension(Integer.MAX_VALUE, 74));
+
+            JPanel topRow = new JPanel(new BorderLayout());
+            topRow.setOpaque(false);
+
+            JPanel left = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+            left.setOpaque(false);
+            JLabel title = new JLabel("Productivity");
+            title.setFont(new Font("Georgia", Font.BOLD, 14));
+            title.setForeground(INK);
+            percentLabel.setFont(new Font("Palatino Linotype", Font.BOLD, 13));
+            percentLabel.setForeground(BLUE);
+            statsLabel.setFont(new Font("Palatino Linotype", Font.PLAIN, 12));
+            statsLabel.setForeground(MUTED);
+            left.add(title);
+            left.add(percentLabel);
+            JLabel dot = new JLabel("·");
+            dot.setForeground(MUTED);
+            left.add(dot);
+            left.add(statsLabel);
+            topRow.add(left, BorderLayout.WEST);
+
+            urgencyStats.setFont(new Font("Palatino Linotype", Font.BOLD, 12));
+            urgencyStats.setForeground(MUTED);
+            topRow.add(urgencyStats, BorderLayout.EAST);
+
+            add(topRow, BorderLayout.NORTH);
+
+            JPanel barTrack = new JPanel() {
+                private static final long serialVersionUID = 1L;
+                @Override protected void paintComponent(Graphics g) {
+                    super.paintComponent(g);
+                    Graphics2D g2 = (Graphics2D) g.create();
+                    g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                    int h = getHeight();
+                    int w = getWidth();
+                    g2.setColor(new Color(230, 226, 215));
+                    g2.fillRoundRect(0, 0, w, h, h, h);
+                    if (progress > 0) {
+                        int fillW = Math.max(h, (int) Math.round(w * Math.min(1.0, progress)));
+                        g2.setColor(progress >= 1.0 ? new Color(63, 140, 85) : BLUE);
+                        g2.fillRoundRect(0, 0, fillW, h, h, h);
+                    }
+                    g2.dispose();
+                }
+            };
+            barTrack.setOpaque(false);
+            barTrack.setPreferredSize(new Dimension(0, 8));
+            barTrack.setMinimumSize(new Dimension(0, 8));
+            add(barTrack, BorderLayout.CENTER);
+        }
+
+        void update(List<Task> allTasks) {
+            int total = allTasks.size();
+            long completed = allTasks.stream().filter(t -> t.getStatus() == TaskStatus.COMPLETED).count();
+            LocalDate today = LocalDate.now();
+            long overdue = allTasks.stream().filter(t -> t.getStatus() != TaskStatus.COMPLETED
+                    && t.getDueDate() != null && t.getDueDate().isBefore(today)).count();
+            long dueToday = allTasks.stream().filter(t -> t.getStatus() != TaskStatus.COMPLETED
+                    && t.getDueDate() != null && t.getDueDate().isEqual(today)).count();
+
+            if (total == 0) {
+                progress = 0.0;
+                percentLabel.setText("0%");
+                statsLabel.setText("No tasks created yet");
+                urgencyStats.setText("");
+            } else {
+                progress = (double) completed / total;
+                int pct = (int) Math.round(progress * 100);
+                percentLabel.setText(pct + "% completed");
+                long totalSubtasks = allTasks.stream().mapToLong(t -> t.getSubtasks().size()).sum();
+                long doneSubtasks = allTasks.stream().mapToLong(Task::getCompletedSubtaskCount).sum();
+                if (totalSubtasks > 0) {
+                    statsLabel.setText(completed + " of " + total + " tasks · " + doneSubtasks + "/" + totalSubtasks + " subtasks");
+                } else {
+                    statsLabel.setText(completed + " of " + total + " tasks");
+                }
+
+                StringBuilder urgency = new StringBuilder();
+                if (overdue > 0) urgency.append(overdue).append(" overdue  ");
+                if (dueToday > 0) urgency.append(dueToday).append(" due today  ");
+                urgencyStats.setText(urgency.toString().trim());
+                urgencyStats.setForeground(overdue > 0 ? new Color(179, 79, 62) : new Color(160, 105, 30));
+            }
+            repaint();
+        }
+    }
+
     private static final class SearchField extends JTextField {
         private static final long serialVersionUID = 1L;
 
@@ -746,5 +1097,216 @@ final class TaskManagerPanel {
             g.dispose();
             super.paintComponent(graphics);
         }
+    }
+
+    private void executeCommand(TaskCommand command) {
+        command.execute();
+        undoStack.push(command);
+        redoStack.clear();
+    }
+
+    private void undo() {
+        if (undoStack.isEmpty()) {
+            showToast("Nothing to undo", false);
+            return;
+        }
+        TaskCommand command = undoStack.pop();
+        command.undo();
+        redoStack.push(command);
+    }
+
+    private void redo() {
+        if (redoStack.isEmpty()) {
+            showToast("Nothing to redo", false);
+            return;
+        }
+        TaskCommand command = redoStack.pop();
+        command.execute();
+        undoStack.push(command);
+    }
+
+    private void showToast(String message, boolean showUndo) {
+        toastLabel.setText(message);
+        toastUndoButton.setVisible(showUndo && !undoStack.isEmpty());
+        toast.setVisible(true);
+        toast.revalidate();
+        toast.repaint();
+        if (toastTimer != null && toastTimer.isRunning()) toastTimer.stop();
+        toastTimer = new javax.swing.Timer(5000, e -> {
+            toast.setVisible(false);
+            toast.revalidate();
+            toast.repaint();
+        });
+        toastTimer.setRepeats(false);
+        toastTimer.start();
+    }
+
+    private static final class TaskMemento {
+        final String title;
+        final String description;
+        final Category category;
+        final Priority priority;
+        final TaskStatus status;
+        final LocalDate dueDate;
+        final Recurrence recurrence;
+        final List<Subtask> subtasks;
+
+        TaskMemento(Task t) {
+            this(t.getTitle(), t.getDescription(), t.getCategory(), t.getPriority(),
+                 t.getStatus(), t.getDueDate(), t.getRecurrence(), t.getSubtasks());
+        }
+
+        TaskMemento(String title, String description, Category category, Priority priority,
+                    TaskStatus status, LocalDate dueDate, Recurrence recurrence, List<Subtask> subtasks) {
+            this.title = title;
+            this.description = description;
+            this.category = category;
+            this.priority = priority;
+            this.status = status;
+            this.dueDate = dueDate;
+            this.recurrence = recurrence;
+            this.subtasks = new ArrayList<>();
+            if (subtasks != null) {
+                for (Subtask s : subtasks) {
+                    this.subtasks.add(new Subtask(s.getTitle(), s.isCompleted()));
+                }
+            }
+        }
+
+        void apply(Task t) {
+            t.update(title, description, category, priority, status, dueDate, recurrence, subtasks);
+        }
+    }
+
+    private final class AddTaskCommand implements TaskCommand {
+        private final Task task;
+        AddTaskCommand(Task task) { this.task = task; }
+        @Override public void execute() {
+            if (!tasks.contains(task)) tasks.add(task);
+            saveAndRefresh();
+            showToast("Added: “" + task.getTitle() + "”", true);
+        }
+        @Override public void undo() {
+            tasks.remove(task);
+            saveAndRefresh();
+            showToast("Undone: add “" + task.getTitle() + "”", false);
+        }
+        @Override public String getDescription() { return "Add “" + task.getTitle() + "”"; }
+    }
+
+    private final class DeleteTaskCommand implements TaskCommand {
+        private final Task task;
+        private final int index;
+        DeleteTaskCommand(Task task, int index) {
+            this.task = task;
+            this.index = Math.max(0, index);
+        }
+        @Override public void execute() {
+            tasks.remove(task);
+            saveAndRefresh();
+            showToast("Deleted: “" + task.getTitle() + "”", true);
+        }
+        @Override public void undo() {
+            tasks.add(Math.min(index, tasks.size()), task);
+            saveAndRefresh();
+            showToast("Restored: “" + task.getTitle() + "”", false);
+        }
+        @Override public String getDescription() { return "Delete “" + task.getTitle() + "”"; }
+    }
+
+    private final class UpdateTaskCommand implements TaskCommand {
+        private final Task task;
+        private final TaskMemento before;
+        private final TaskMemento after;
+        UpdateTaskCommand(Task task, TaskMemento before, TaskMemento after) {
+            this.task = task;
+            this.before = before;
+            this.after = after;
+        }
+        @Override public void execute() {
+            after.apply(task);
+            saveAndRefresh();
+            showToast("Updated: “" + task.getTitle() + "”", true);
+        }
+        @Override public void undo() {
+            before.apply(task);
+            saveAndRefresh();
+            showToast("Undone: update “" + task.getTitle() + "”", false);
+        }
+        @Override public String getDescription() { return "Update “" + task.getTitle() + "”"; }
+    }
+
+    private final class ToggleTaskCommand implements TaskCommand {
+        private final Task task;
+        private final TaskStatus prevStatus;
+        private final TaskStatus newStatus;
+        private final List<Boolean> prevSubtaskStates = new ArrayList<>();
+
+        ToggleTaskCommand(Task task, TaskStatus newStatus) {
+            this.task = task;
+            this.prevStatus = task.getStatus();
+            this.newStatus = newStatus;
+            for (Subtask s : task.getSubtasks()) {
+                prevSubtaskStates.add(s.isCompleted());
+            }
+        }
+        @Override public void execute() {
+            task.update(task.getTitle(), task.getDescription(), task.getCategory(), task.getPriority(), newStatus, task.getDueDate());
+            boolean setSubtasksCompleted = (newStatus == TaskStatus.COMPLETED);
+            for (Subtask s : task.getSubtasks()) {
+                s.setCompleted(setSubtasksCompleted);
+            }
+            saveAndRefresh();
+            showToast(newStatus == TaskStatus.COMPLETED ? "Completed: “" + task.getTitle() + "”" : "Marked pending: “" + task.getTitle() + "”", true);
+        }
+        @Override public void undo() {
+            task.update(task.getTitle(), task.getDescription(), task.getCategory(), task.getPriority(), prevStatus, task.getDueDate());
+            for (int i = 0; i < task.getSubtasks().size() && i < prevSubtaskStates.size(); i++) {
+                task.getSubtasks().get(i).setCompleted(prevSubtaskStates.get(i));
+            }
+            saveAndRefresh();
+            showToast("Undone: status change", false);
+        }
+        @Override public String getDescription() { return "Toggle “" + task.getTitle() + "”"; }
+    }
+
+    private final class ToggleSubtaskCommand implements TaskCommand {
+        private final Task task;
+        private final Subtask subtask;
+        private final boolean newState;
+        private final TaskStatus prevTaskStatus;
+        private TaskStatus nextTaskStatus;
+
+        ToggleSubtaskCommand(Task task, Subtask subtask, boolean newState) {
+            this.task = task;
+            this.subtask = subtask;
+            this.newState = newState;
+            this.prevTaskStatus = task.getStatus();
+        }
+        @Override public void execute() {
+            subtask.setCompleted(newState);
+            if (!task.getSubtasks().isEmpty()) {
+                boolean allDone = task.getSubtasks().stream().allMatch(Subtask::isCompleted);
+                if (allDone && task.getStatus() != TaskStatus.COMPLETED) {
+                    nextTaskStatus = TaskStatus.COMPLETED;
+                    task.update(task.getTitle(), task.getDescription(), task.getCategory(), task.getPriority(), TaskStatus.COMPLETED, task.getDueDate());
+                    checkRecurringOnComplete(task);
+                    showToast("Completed: “" + task.getTitle() + "” (all subtasks done)", true);
+                } else if (!allDone && task.getStatus() == TaskStatus.COMPLETED) {
+                    nextTaskStatus = TaskStatus.PENDING;
+                    task.update(task.getTitle(), task.getDescription(), task.getCategory(), task.getPriority(), TaskStatus.PENDING, task.getDueDate());
+                    showToast("Marked pending: “" + task.getTitle() + "”", true);
+                }
+            }
+            saveAndRefresh();
+        }
+        @Override public void undo() {
+            subtask.setCompleted(!newState);
+            if (nextTaskStatus != null) {
+                task.update(task.getTitle(), task.getDescription(), task.getCategory(), task.getPriority(), prevTaskStatus, task.getDueDate());
+            }
+            saveAndRefresh();
+        }
+        @Override public String getDescription() { return "Subtask “" + subtask.getTitle() + "”"; }
     }
 }

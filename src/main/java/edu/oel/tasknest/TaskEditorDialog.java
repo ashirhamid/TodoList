@@ -11,6 +11,7 @@ import java.awt.Insets;
 import java.awt.Window;
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
+import java.util.ArrayList;
 import java.util.List;
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
@@ -25,7 +26,7 @@ import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
 
 /** Dialog for creating or editing a task.
- * @author OEL Student Team (add team names before submission)
+ * @author Muhammad Mehroz Ammar (534699), Ashir Hamid
  */
 final class TaskEditorDialog {
     private static final java.awt.Color INK = new java.awt.Color(37, 57, 86);
@@ -75,6 +76,19 @@ final class TaskEditorDialog {
         JTextField dueDate = new JTextField(existing == null || existing.getDueDate() == null
                 ? "" : existing.getDueDate().toString());
         styleInput(dueDate);
+        JComboBox<Recurrence> recurrence = new JComboBox<>(Recurrence.values());
+        recurrence.setSelectedItem(existing == null ? Recurrence.NONE : existing.getRecurrence());
+        recurrence.setBackground(FIELD);
+
+        JTextArea subtasks = new JTextArea(existing == null ? "" : existing.getSubtasksAsText(), 3, 20);
+        subtasks.setFont(new java.awt.Font("Palatino Linotype", java.awt.Font.PLAIN, 13));
+        subtasks.setBackground(FIELD);
+        subtasks.setBorder(BorderFactory.createEmptyBorder(6, 8, 6, 8));
+        JScrollPane subtasksScroll = new JScrollPane(subtasks);
+        subtasksScroll.setPreferredSize(new Dimension(410, 80));
+        subtasksScroll.getViewport().setBackground(FIELD);
+        subtasksScroll.setBorder(BorderFactory.createLineBorder(new java.awt.Color(255, 255, 255, 180), 1, true));
+
         category.setBackground(FIELD);
         priority.setBackground(FIELD);
         status.setBackground(FIELD);
@@ -87,11 +101,13 @@ final class TaskEditorDialog {
         addField(fields, c, "Task title", title);
         c.gridy++; c.insets = new Insets(9, 0, 5, 0);
         JScrollPane descriptionScroll = new JScrollPane(description);
-        descriptionScroll.setPreferredSize(new Dimension(410, 110));
+        descriptionScroll.setPreferredSize(new Dimension(410, 95));
         descriptionScroll.setOpaque(false);
         descriptionScroll.getViewport().setBackground(FIELD);
         descriptionScroll.setBorder(BorderFactory.createLineBorder(new java.awt.Color(255, 255, 255, 180), 1, true));
         addField(fields, c, "Description", descriptionScroll);
+        c.gridy++; c.insets = new Insets(9, 0, 5, 0);
+        addField(fields, c, "Sub-tasks / Checklist (one item per line)", subtasksScroll);
         c.gridy++; c.insets = new Insets(9, 0, 5, 0);
         addField(fields, c, "Category", category);
         c.gridy++; c.insets = new Insets(9, 0, 5, 0);
@@ -100,6 +116,8 @@ final class TaskEditorDialog {
         addField(fields, c, "Status", status);
         c.gridy++; c.insets = new Insets(9, 0, 5, 0);
         addField(fields, c, "Due date (optional, YYYY-MM-DD)", dueDate);
+        c.gridy++; c.insets = new Insets(9, 0, 5, 0);
+        addField(fields, c, "Repeat", recurrence);
         root.add(fields, BorderLayout.CENTER);
 
         final Draft[] result = new Draft[1];
@@ -138,8 +156,28 @@ final class TaskEditorDialog {
                     return;
                 }
             }
+
+            List<Subtask> parsedSubtasks = new ArrayList<>();
+            String[] lines = subtasks.getText().split("\\R");
+            for (String line : lines) {
+                String cleanLine = line.trim();
+                if (!cleanLine.isEmpty()) {
+                    boolean wasDone = false;
+                    if (existing != null) {
+                        for (Subtask oldSub : existing.getSubtasks()) {
+                            if (oldSub.getTitle().equalsIgnoreCase(cleanLine)) {
+                                wasDone = oldSub.isCompleted();
+                                break;
+                            }
+                        }
+                    }
+                    parsedSubtasks.add(new Subtask(cleanLine, wasDone));
+                }
+            }
+
             result[0] = new Draft(cleanTitle, description.getText().trim(), categoryName,
-                    (Priority) priority.getSelectedItem(), (TaskStatus) status.getSelectedItem(), parsedDate);
+                    (Priority) priority.getSelectedItem(), (TaskStatus) status.getSelectedItem(), parsedDate,
+                    (Recurrence) recurrence.getSelectedItem(), parsedSubtasks);
             dialog.dispose();
         });
         actions.add(cancel);
@@ -173,7 +211,7 @@ final class TaskEditorDialog {
     }
 
     /** Validated values returned by the editor.
-     * @author OEL Student Team (add team names before submission)
+     * @author Muhammad Mehroz Ammar (534699), Ashir Hamid
      */
     static final class Draft {
         final String title;
@@ -182,15 +220,19 @@ final class TaskEditorDialog {
         final Priority priority;
         final TaskStatus status;
         final LocalDate dueDate;
+        final Recurrence recurrence;
+        final List<Subtask> subtasks;
 
         Draft(String title, String description, String category, Priority priority,
-              TaskStatus status, LocalDate dueDate) {
+              TaskStatus status, LocalDate dueDate, Recurrence recurrence, List<Subtask> subtasks) {
             this.title = title;
             this.description = description;
             this.category = category;
             this.priority = priority;
             this.status = status;
             this.dueDate = dueDate;
+            this.recurrence = recurrence == null ? Recurrence.NONE : recurrence;
+            this.subtasks = subtasks == null ? new ArrayList<>() : subtasks;
         }
     }
 }
