@@ -9,7 +9,7 @@ import javax.swing.plaf.basic.BasicButtonUI;
 import javax.swing.border.EmptyBorder;
 
 /** A rounded, restrained button that sits naturally on the color-wash background.
- * @author OEL Student Team (add team names before submission)
+ * @author Muhammad Mehroz Ammar (534699), Ashir Hamid
  */
 final class SoftButton extends JButton {
     private static final long serialVersionUID = 1L;

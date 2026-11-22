@@ -1,7 +1,7 @@
 package edu.oel.tasknest;
 
 /** The workflow state of a task.
- * @author OEL Student Team (add team names before submission)
+ * @author Muhammad Mehroz Ammar (534699), Ashir Hamid
  */
 public enum TaskStatus {
     /** Task has not been started. */

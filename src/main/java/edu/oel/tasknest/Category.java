@@ -3,7 +3,7 @@ package edu.oel.tasknest;
 import java.util.Objects;
 
 /** A named group used to organize tasks.
- * @author OEL Student Team (add team names before submission)
+ * @author Muhammad Mehroz Ammar (534699), Ashir Hamid
  */
 public final class Category {
     private final String name;

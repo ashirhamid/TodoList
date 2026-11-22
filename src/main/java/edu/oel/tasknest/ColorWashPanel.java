@@ -9,7 +9,7 @@ import java.awt.geom.Point2D;
 import javax.swing.JPanel;
 
 /** A softly textured cream-to-blue canvas shared by the app and its dialogs.
- * @author OEL Student Team (add team names before submission)
+ * @author Muhammad Mehroz Ammar (534699), Ashir Hamid
  */
 final class ColorWashPanel extends JPanel {
     private static final long serialVersionUID = 1L;

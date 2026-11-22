@@ -1,7 +1,7 @@
 package edu.oel.tasknest;
 
 /** The user-selected importance of a task.
- * @author OEL Student Team (add team names before submission)
+ * @author Muhammad Mehroz Ammar (534699), Ashir Hamid
  */
 public enum Priority {
     /** Lowest importance level. */

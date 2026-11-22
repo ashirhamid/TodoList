@@ -5,7 +5,7 @@ import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
 
 /** Starts the TaskNest desktop application.
- * @author OEL Student Team (add team names before submission)
+ * @author Muhammad Mehroz Ammar (534699), Ashir Hamid
  */
 public final class TaskNestApp {
     private TaskNestApp() { }
