@@ -18,7 +18,7 @@ import java.util.Properties;
 import java.util.UUID;
 
 /** Loads and saves tasks and categories in a local properties file.
- * @author OEL Student Team (add team names before submission)
+ * @author Muhammad Mehroz Ammar (534699), Ashir Hamid
  */
 public final class TaskRepository {
     private static final String VERSION = "1";
@@ -76,7 +76,31 @@ public final class TaskRepository {
             TaskStatus status = TaskStatus.valueOf(required(properties, prefix + "status"));
             String due = required(properties, prefix + "dueDate");
             LocalDate dueDate = due.isEmpty() ? null : LocalDate.parse(due);
-            tasks.add(new Task(id, createdAt, title, description, category, priority, status, dueDate));
+            Task task = new Task(id, createdAt, title, description, category, priority, status, dueDate);
+
+            String recStr = properties.getProperty(prefix + "recurrence", "NONE");
+            try {
+                task.setRecurrence(Recurrence.valueOf(recStr));
+            } catch (Exception ignored) {
+                task.setRecurrence(Recurrence.NONE);
+            }
+
+            int subtaskCount = 0;
+            String subCountStr = properties.getProperty(prefix + "subtask.count");
+            if (subCountStr != null) {
+                try { subtaskCount = Integer.parseInt(subCountStr); } catch (Exception ignored) {}
+            }
+            List<Subtask> subtasks = new ArrayList<>();
+            for (int j = 0; j < subtaskCount; j++) {
+                String subTitleEnc = properties.getProperty(prefix + "subtask." + j + ".title");
+                if (subTitleEnc != null) {
+                    String subTitle = decode(subTitleEnc);
+                    boolean done = Boolean.parseBoolean(properties.getProperty(prefix + "subtask." + j + ".done", "false"));
+                    subtasks.add(new Subtask(subTitle, done));
+                }
+            }
+            task.setSubtasks(subtasks);
+            tasks.add(task);
         }
         return new AppData(tasks, categories);
     }
@@ -106,6 +130,13 @@ public final class TaskRepository {
             properties.setProperty(prefix + "priority", task.getPriority().name());
             properties.setProperty(prefix + "status", task.getStatus().name());
             properties.setProperty(prefix + "dueDate", task.getDueDate() == null ? "" : task.getDueDate().toString());
+            properties.setProperty(prefix + "recurrence", task.getRecurrence().name());
+            properties.setProperty(prefix + "subtask.count", Integer.toString(task.getSubtasks().size()));
+            for (int j = 0; j < task.getSubtasks().size(); j++) {
+                Subtask sub = task.getSubtasks().get(j);
+                properties.setProperty(prefix + "subtask." + j + ".title", encode(sub.getTitle()));
+                properties.setProperty(prefix + "subtask." + j + ".done", Boolean.toString(sub.isCompleted()));
+            }
         }
 
         Path temp = Files.createTempFile(file.getParent(), "tasks-", ".tmp");
@@ -156,7 +187,7 @@ public final class TaskRepository {
     }
 
     /** Immutable pair of loaded lists.
-     * @author OEL Student Team (add team names before submission)
+     * @author Muhammad Mehroz Ammar (534699), Ashir Hamid
      */
     public static final class AppData {
         private final List<Task> tasks;

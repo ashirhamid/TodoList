@@ -2,11 +2,13 @@ package edu.oel.tasknest;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 
 /** A task record shown and managed by the application.
- * @author OEL Student Team (add team names before submission)
+ * @author Muhammad Mehroz Ammar (534699), Ashir Hamid
  */
 public final class Task {
     private final UUID id;
@@ -17,6 +19,8 @@ public final class Task {
     private Priority priority;
     private TaskStatus status;
     private LocalDate dueDate;
+    private Recurrence recurrence = Recurrence.NONE;
+    private final List<Subtask> subtasks = new ArrayList<>();
 
     /** Creates a new task with a generated identifier and current creation time.
      * @param title task title
@@ -71,6 +75,16 @@ public final class Task {
         this.dueDate = dueDate;
     }
 
+    /** Updates all editable task fields including recurrence and subtasks.
+     */
+    public void update(String title, String description, Category category,
+                       Priority priority, TaskStatus status, LocalDate dueDate,
+                       Recurrence recurrence, List<Subtask> subtasks) {
+        update(title, description, category, priority, status, dueDate);
+        setRecurrence(recurrence);
+        setSubtasks(subtasks);
+    }
+
     /** Returns the stable task identifier.
      * @return stable task identifier
      */
@@ -103,4 +117,39 @@ public final class Task {
      * @return original creation timestamp
      */
     public LocalDateTime getCreatedAt() { return createdAt; }
+
+    /** Returns the recurring frequency. */
+    public Recurrence getRecurrence() { return recurrence; }
+    /** Sets the recurring frequency. */
+    public void setRecurrence(Recurrence recurrence) {
+        this.recurrence = recurrence == null ? Recurrence.NONE : recurrence;
+    }
+
+    /** Returns the list of subtasks. */
+    public List<Subtask> getSubtasks() { return subtasks; }
+    /** Sets the list of subtasks. */
+    public void setSubtasks(List<Subtask> newSubtasks) {
+        this.subtasks.clear();
+        if (newSubtasks != null) {
+            for (Subtask s : newSubtasks) {
+                if (s != null && !s.getTitle().isBlank()) {
+                    this.subtasks.add(new Subtask(s.getTitle(), s.isCompleted()));
+                }
+            }
+        }
+    }
+
+    /** Returns the count of completed subtasks. */
+    public long getCompletedSubtaskCount() {
+        return subtasks.stream().filter(Subtask::isCompleted).count();
+    }
+
+    /** Formats subtasks as text lines for editors. */
+    public String getSubtasksAsText() {
+        StringBuilder sb = new StringBuilder();
+        for (Subtask s : subtasks) {
+            sb.append(s.getTitle()).append("\n");
+        }
+        return sb.toString().trim();
+    }
 }
