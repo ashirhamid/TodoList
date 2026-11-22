@@ -12,9 +12,15 @@ TaskNest is a Java Swing desktop TODO application for creating, organizing, prio
 ## Features
 
 - Create, view, edit, and delete tasks.
+- Undo / Redo system (`Ctrl+Z` / `Ctrl+Y`) with interactive toast notification (Command Pattern).
+- Interactive sub-tasks / micro-checklists inside tasks with bidirectional synchronization (Composite Pattern).
+- Smart recurring tasks (Daily, Weekly, Monthly) with automated next-run scheduling upon completion.
 - Set a task title, description, category, priority, status, and optional due date.
 - Mark tasks complete from the task list.
 - Search tasks and filter by status, priority, or category.
+- Dynamic due-date badges (`🔴 Overdue`, `🟡 Due Today`, `🟢 Upcoming`) and dedicated "Due Today" / "Overdue" filters.
+- Live productivity progress bar with dynamic completion percentage and urgency metrics.
+- One-click data export to Markdown checklist (`.md`) and spreadsheet (`.csv`) formats.
 - Sort higher-priority tasks first, then earlier due dates.
 - Reject blank titles and categories, and validate due dates in `YYYY-MM-DD` format.
 - Save tasks and categories automatically to the current user's `.tasknest/tasks.properties` file.

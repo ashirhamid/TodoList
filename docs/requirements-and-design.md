@@ -20,9 +20,16 @@ The application uses a textured cream-to-blue background wash with navy text. Ro
 
 ## CLO evidence
 
-- **CLO 2 / PLO 2 / WA4:** The project expresses the task problem as requirements, models the task data, validates user input, and applies explicit priority and due-date sorting rules. These choices provide material for the student's investigation and design explanation.
-- **CLO 4 / PLO 5 / WA5:** The project can be built with the JDK, opened in a Java IDE, tracked with Git, and documented with generated Javadoc.
+- **CLO 2 / PLO 2 / WA4:** The project expresses the task problem as requirements, models the task data, validates user input, applies explicit priority and due-date sorting rules, and tracks productivity metrics.
+- **CLO 4 / PLO 5 / WA5:** The project can be built with the JDK, opened in a Java IDE, tracked with Git, and documented with generated Javadoc. Data interoperability is demonstrated via standard Markdown and CSV file serialization.
+- **CLO 5 / PLO 8 / WA8 (Testing):** Functional validation across CRUD operations, negative testing (rejecting empty titles), empty states, and error handling.
+
+## Software Engineering & Design Patterns
+
+- **Command Pattern (GoF):** Implemented via `TaskCommand`, `undoStack`, and `redoStack`. All user actions (creating, deleting, updating, status toggling) are encapsulated as reversible command objects supporting keyboard shortcuts (`Ctrl+Z`, `Ctrl+Y`) and transient toast notifications.
+- **Composite Pattern:** Implemented via `Subtask` components embedded in parent `Task` objects, supporting interactive micro-checklists, bidirectional completion synchronization, and hierarchical completion metrics.
+- **Business Rule & Scheduling Engine:** `Recurrence` automatically computes next occurrences (`LocalDate.plusDays`, `plusWeeks`, `plusMonths`) when recurring tasks are completed.
 
 ## Main classes
 
-`Task` owns task fields and validation. `Category`, `Priority`, and `TaskStatus` represent the organizing and workflow concepts. `TaskRepository` handles local persistence. `TaskEditorDialog` gathers validated input. `TaskManagerPanel` renders the interface and coordinates operations. `TaskNestApp` starts the program.
+`Task` owns task fields, recurrence, subtasks, and validation. `Subtask` represents individual checklist items. `Recurrence` encapsulates repeat schedules. `TaskCommand` defines the undo/redo contract. `Category`, `Priority`, and `TaskStatus` represent organizing workflow concepts. `TaskRepository` handles local atomic persistence. `TaskEditorDialog` gathers validated input. `TaskManagerPanel` renders the interface and coordinates operations. `TaskNestApp` starts the program.
